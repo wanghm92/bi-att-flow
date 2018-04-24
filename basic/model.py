@@ -96,19 +96,23 @@ class Model(object):
                     heights = list(map(int, config.filter_heights.split(',')))
                     assert sum(filter_sizes) == dco, (filter_sizes, dco)
                     with tf.variable_scope("conv"):
-                        xx = multi_conv1d(Acx, filter_sizes, heights, "VALID",  self.is_train, config.keep_prob, scope="xx")
+                        xx = multi_conv1d(Acx, filter_sizes, heights, "VALID",
+                                          self.is_train, config.keep_prob, scope="xx")
                         if config.share_cnn_weights:
                             tf.get_variable_scope().reuse_variables()
-                            qq = multi_conv1d(Acq, filter_sizes, heights, "VALID", self.is_train, config.keep_prob, scope="xx")
+                            qq = multi_conv1d(Acq, filter_sizes, heights, "VALID",
+                                              self.is_train, config.keep_prob, scope="xx")
                         else:
-                            qq = multi_conv1d(Acq, filter_sizes, heights, "VALID", self.is_train, config.keep_prob, scope="qq")
+                            qq = multi_conv1d(Acq, filter_sizes, heights, "VALID",
+                                              self.is_train, config.keep_prob, scope="qq")
                         xx = tf.reshape(xx, [-1, M, JX, dco])
                         qq = tf.reshape(qq, [-1, JQ, dco])
 
             if config.use_word_emb:
                 with tf.variable_scope("emb_var"), tf.device("/cpu:0"):
                     if config.mode == 'train':
-                        word_emb_mat = tf.get_variable("word_emb_mat", dtype='float', shape=[VW, dw], initializer=get_initializer(config.emb_mat))
+                        word_emb_mat = tf.get_variable("word_emb_mat", dtype='float', shape=[VW, dw],
+                                                       initializer=get_initializer(config.emb_mat))
                     else:
                         word_emb_mat = tf.get_variable("word_emb_mat", shape=[VW, dw], dtype='float')
                     if config.use_glove_for_unk:
@@ -156,15 +160,22 @@ class Model(object):
         q_len = tf.reduce_sum(tf.cast(self.q_mask, 'int32'), 1)  # [N]
 
         with tf.variable_scope("prepro"):
-            (fw_u, bw_u), ((_, fw_u_f), (_, bw_u_f)) = bidirectional_dynamic_rnn(d_cell_fw, d_cell_bw, qq, q_len, dtype='float', scope='u1')  # [N, J, d], [N, d]
+            # [N, J, d], [N, d]
+            (fw_u, bw_u), ((_, fw_u_f), (_, bw_u_f)) = bidirectional_dynamic_rnn(d_cell_fw, d_cell_bw, qq, q_len,
+                                                                                 dtype='float', scope='u1')
             u = tf.concat(axis=2, values=[fw_u, bw_u])
             if config.share_lstm_weights:
                 tf.get_variable_scope().reuse_variables()
-                (fw_h, bw_h), _ = bidirectional_dynamic_rnn(cell_fw, cell_bw, xx, x_len, dtype='float', scope='u1')  # [N, M, JX, 2d]
-                h = tf.concat(axis=3, values=[fw_h, bw_h])  # [N, M, JX, 2d]
+
+                # [N, M, JX, 2d]
+                (fw_h, bw_h), _ = bidirectional_dynamic_rnn(cell_fw, cell_bw, xx, x_len, dtype='float', scope='u1')
+                # [N, M, JX, 2d]
+                h = tf.concat(axis=3, values=[fw_h, bw_h])
             else:
-                (fw_h, bw_h), _ = bidirectional_dynamic_rnn(cell_fw, cell_bw, xx, x_len, dtype='float', scope='h1')  # [N, M, JX, 2d]
-                h = tf.concat(axis=3, values=[fw_h, bw_h])  # [N, M, JX, 2d]
+                # [N, M, JX, 2d]
+                (fw_h, bw_h), _ = bidirectional_dynamic_rnn(cell_fw, cell_bw, xx, x_len, dtype='float', scope='h1')
+                # [N, M, JX, 2d]
+                h = tf.concat(axis=3, values=[fw_h, bw_h])
             self.tensor_dict['u'] = u
             self.tensor_dict['h'] = h
 
@@ -182,15 +193,18 @@ class Model(object):
                 second_cell_bw = AttentionCell(cell3_bw, u, mask=q_mask, mapper='sim',
                                                input_keep_prob=self.config.input_keep_prob, is_train=self.is_train)
             else:
-                p0 = attention_layer(config, self.is_train, h, u, h_mask=self.x_mask, u_mask=self.q_mask, scope="p0", tensor_dict=self.tensor_dict)
+                p0 = attention_layer(config, self.is_train, h, u, h_mask=self.x_mask, u_mask=self.q_mask, scope="p0",
+                                     tensor_dict=self.tensor_dict)
                 first_cell_fw = d_cell2_fw
                 second_cell_fw = d_cell3_fw
                 first_cell_bw = d_cell2_bw
                 second_cell_bw = d_cell3_bw
 
-            (fw_g0, bw_g0), _ = bidirectional_dynamic_rnn(first_cell_fw, first_cell_bw, p0, x_len, dtype='float', scope='g0')  # [N, M, JX, 2d]
+            (fw_g0, bw_g0), _ = bidirectional_dynamic_rnn(first_cell_fw, first_cell_bw, p0, x_len,
+                                                          dtype='float', scope='g0')  # [N, M, JX, 2d]
             g0 = tf.concat(axis=3, values=[fw_g0, bw_g0])
-            (fw_g1, bw_g1), _ = bidirectional_dynamic_rnn(second_cell_fw, second_cell_bw, g0, x_len, dtype='float', scope='g1')  # [N, M, JX, 2d]
+            (fw_g1, bw_g1), _ = bidirectional_dynamic_rnn(second_cell_fw, second_cell_bw, g0, x_len,
+                                                          dtype='float', scope='g1')  # [N, M, JX, 2d]
             g1 = tf.concat(axis=3, values=[fw_g1, bw_g1])
 
             logits = get_logits([g1, p0], d, True, wd=config.wd, input_keep_prob=config.input_keep_prob,
@@ -198,7 +212,8 @@ class Model(object):
             a1i = softsel(tf.reshape(g1, [N, M * JX, 2 * d]), tf.reshape(logits, [N, M * JX]))
             a1i = tf.tile(tf.expand_dims(tf.expand_dims(a1i, 1), 1), [1, M, JX, 1])
 
-            (fw_g2, bw_g2), _ = bidirectional_dynamic_rnn(d_cell4_fw, d_cell4_bw, tf.concat(axis=3, values=[p0, g1, a1i, g1 * a1i]),
+            (fw_g2, bw_g2), _ = bidirectional_dynamic_rnn(d_cell4_fw, d_cell4_bw,
+                                                          tf.concat(axis=3, values=[p0, g1, a1i, g1 * a1i]),
                                                           x_len, dtype='float', scope='g2')  # [N, M, JX, 2d]
             g2 = tf.concat(axis=3, values=[fw_g2, bw_g2])
             logits2 = get_logits([g2, p0], d, True, wd=config.wd, input_keep_prob=config.input_keep_prob,
@@ -265,7 +280,8 @@ class Model(object):
                     self.concat_logits, tf.cast(concat_y, 'float') / tf.reduce_sum(tf.cast(self.wy, 'float')))
             else:
                 losses = tf.nn.softmax_cross_entropy_with_logits(
-                    self.logits2, tf.cast(tf.reshape(self.wy, [-1, M * JX]), 'float') / tf.reduce_sum(tf.cast(self.wy, 'float')))
+                    self.logits2, tf.cast(tf.reshape(self.wy, [-1, M * JX]), 'float') / 
+                    tf.reduce_sum(tf.cast(self.wy, 'float')))
             ce_loss = tf.reduce_mean(loss_mask * losses)
             """
             tf.add_to_collection('losses', ce_loss)
@@ -274,9 +290,11 @@ class Model(object):
             if config.na:
                 na = tf.reshape(self.na, [-1, 1])
                 concat_y = tf.concat(axis=1, values=[na, tf.reshape(self.y, [-1, M * JX])])
-                losses = tf.nn.softmax_cross_entropy_with_logits(logits=self.concat_logits, labels=tf.cast(concat_y, 'float'))
+                losses = tf.nn.softmax_cross_entropy_with_logits(logits=self.concat_logits,
+                                                                 labels=tf.cast(concat_y, 'float'))
                 concat_y2 = tf.concat(axis=1, values=[na, tf.reshape(self.y2, [-1, M * JX])])
-                losses2 = tf.nn.softmax_cross_entropy_with_logits(logits=self.concat_logits2, labels=tf.cast(concat_y2, 'float'))
+                losses2 = tf.nn.softmax_cross_entropy_with_logits(logits=self.concat_logits2,
+                                                                  labels=tf.cast(concat_y2, 'float'))
             else:
                 losses = tf.nn.softmax_cross_entropy_with_logits(
                     logits=self.logits, labels=tf.cast(tf.reshape(self.y, [-1, M * JX]), 'float'))
@@ -327,12 +345,14 @@ class Model(object):
         config = self.config
         N, M, JX, JQ, VW, VC, d, W = \
             config.batch_size, config.max_num_sents, config.max_sent_size, \
-            config.max_ques_size, config.word_vocab_size, config.char_vocab_size, config.hidden_size, config.max_word_size
+            config.max_ques_size, config.word_vocab_size, config.char_vocab_size, \
+            config.hidden_size, config.max_word_size
         feed_dict = {}
 
         if config.len_opt:
             """
-            Note that this optimization results in variable GPU RAM usage (i.e. can cause OOM in the middle of training.)
+            Note that this optimization results in variable GPU RAM usage 
+            (i.e. can cause OOM in the middle of training.)
             First test without len_opt and make sure no OOM, and use len_opt
             """
             if sum(len(sent) for para in batch.data['x'] for sent in para) == 0:

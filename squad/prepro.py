@@ -1,12 +1,12 @@
 import argparse
 import json
-import os
+import os, sys
 # data: q, cq, (dq), (pq), y, *x, *cx
 # shared: x, cx, (dx), (px), word_counter, char_counter, word2vec
 # no metadata
 from collections import Counter
 
-from tqdm import tqdm
+from tqdm import tqdm #A fast, extensible progress bar for Python and CLI: https://tqdm.github.io/
 
 from squad.utils import get_word_span, get_word_idx, process_tokens
 
@@ -18,6 +18,11 @@ def main():
 
 def get_args():
     parser = argparse.ArgumentParser()
+    '''
+        On Unix, an initial ~ is replaced by the environment variable HOME if it is set; 
+        otherwise the current user’s home directory is looked up in the password directory using pwd. 
+        An initial ~user is looked up directly in the password directory.
+    '''
     home = os.path.expanduser("~")
     source_dir = os.path.join(home, "data", "squad")
     target_dir = "data/squad"
@@ -35,7 +40,7 @@ def get_args():
     parser.add_argument("--tokenizer", default="PTB", type=str)
     parser.add_argument("--url", default="vision-server2.corp.ai2", type=str)
     parser.add_argument("--port", default=8000, type=int)
-    parser.add_argument("--split", action='store_true')
+    parser.add_argument("--split", action='store_true') #False by default
     parser.add_argument("--suffix", default="")
     # TODO : put more args here
     return parser.parse_args()
@@ -102,13 +107,14 @@ def get_word2vec(args, word_counter):
             elif word.upper() in word_counter:
                 word2vec_dict[word.upper()] = vector
 
-    print("{}/{} of word vocab have corresponding vectors in {}".format(len(word2vec_dict), len(word_counter), glove_path))
+    print("{}/{} of word vocab appear in {}".format(len(word2vec_dict), len(word_counter), glove_path))
     return word2vec_dict
 
 
 def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="default", in_path=None):
     if args.tokenizer == "PTB":
         import nltk
+        # uses an instance of PunktSentenceTokenizer from the nltk.tokenize.punkt module to do sentence segmentation
         sent_tokenize = nltk.sent_tokenize
         def word_tokenize(tokens):
             return [token.replace("''", '"').replace("``", '"') for token in nltk.word_tokenize(tokens)]
@@ -121,7 +127,7 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
         raise Exception()
 
     if not args.split:
-        sent_tokenize = lambda para: [para]
+        sent_tokenize = lambda para: [para] # wrap in a list to make it an iterable
 
     source_path = in_path or os.path.join(args.source_dir, "{}-{}v1.1.json".format(data_type, args.suffix))
     source_data = json.load(open(source_path, 'r'))
@@ -146,16 +152,17 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
             context = para['context']
             context = context.replace("''", '" ')
             context = context.replace("``", '" ')
-            xi = list(map(word_tokenize, sent_tokenize(context)))
+            xi = list(map(word_tokenize, sent_tokenize(context))) # map(f, iterable) == [f(x) for x in iterable]
             xi = [process_tokens(tokens) for tokens in xi]  # process tokens
             # given xi, add chars
             cxi = [[list(xijk) for xijk in xij] for xij in xi]
+            # sys.exit(0)
             xp.append(xi)
             cxp.append(cxi)
             pp.append(context)
 
-            for xij in xi:
-                for xijk in xij:
+            for xij in xi: # context sent
+                for xijk in xij: # context word
                     word_counter[xijk] += len(para['qas'])
                     lower_word_counter[xijk.lower()] += len(para['qas'])
                     for xijkl in xijk:
@@ -224,7 +231,7 @@ def prepro_each(args, data_type, start_ratio=0.0, stop_ratio=1.0, out_name="defa
         if args.debug:
             break
 
-    word2vec_dict = get_word2vec(args, word_counter)
+    word2vec_dict = get_word2vec(args, word_counter) # filter glove embeddings with vocab list
     lower_word2vec_dict = get_word2vec(args, lower_word_counter)
 
     # add context here

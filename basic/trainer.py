@@ -25,8 +25,7 @@ class Trainer(object):
         _, ds = batch
         feed_dict = self.model.get_feed_dict(ds, True)
         if get_summary:
-            loss, summary, train_op = \
-                sess.run([self.loss, self.summary, self.train_op], feed_dict=feed_dict)
+            loss, summary, train_op = sess.run([self.loss, self.summary, self.train_op], feed_dict=feed_dict)
         else:
             loss, train_op = sess.run([self.loss, self.train_op], feed_dict=feed_dict)
             summary = None
@@ -65,8 +64,7 @@ class MultiGPUTrainer(object):
             feed_dict.update(model.get_feed_dict(ds, True))
 
         if get_summary:
-            loss, summary, train_op = \
-                sess.run([self.loss, self.summary, self.train_op], feed_dict=feed_dict)
+            loss, summary, train_op = sess.run([self.loss, self.summary, self.train_op], feed_dict=feed_dict)
         else:
             loss, train_op = sess.run([self.loss, self.train_op], feed_dict=feed_dict)
             summary = None
